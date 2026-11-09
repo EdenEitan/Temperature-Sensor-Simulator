@@ -17,7 +17,19 @@ class Reading:
     alarm: bool
 
 
+@dataclass(frozen=True)
+class DeviceStatus:
+    fault: str
+    samples: int
+
+
 class Device:
+    """Typed sensor methods; command() remains available for negative tests."""
+
+    FAULT_MODES = frozenset({
+        "NONE", "DISCONNECTED", "STUCK", "TIMEOUT", "COMMUNICATION_FAILURE"
+    })
+
     def __init__(self, binary="./device_sim", timeout=0.5):
         if timeout <= 0:
             raise ValueError("timeout must be positive")
@@ -97,6 +109,62 @@ class Device:
             raise DeviceError(reply[4:])
 
         return reply
+
+    def _expect_ok(self, command):
+        reply = self.command(command)
+        if reply != "OK":
+            raise DeviceError(f"unexpected response: {reply!r}")
+        return reply
+
+    def _set_number(self, command, value):
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value)):
+            raise ValueError("value must be a finite number")
+        # Let C++ validate ranges: it is the system under test.
+        return self._expect_ok(f"{command} {value}")
+
+    def set_temperature(self, value):
+        """Set raw temperature (-40 to 125 Celsius)."""
+        return self._set_number("SET", value)
+
+    def set_calibration(self, offset):
+        """Set calibration offset (-10 to 10 Celsius)."""
+        return self._set_number("CALIBRATE", offset)
+
+    def set_threshold(self, value):
+        """Set alarm threshold (-40 to 125 Celsius)."""
+        return self._set_number("THRESHOLD", value)
+
+    def set_fault(self, mode):
+        """Inject a sensor fault; communication failure needs process restart."""
+        if not isinstance(mode, str) or mode not in self.FAULT_MODES:
+            raise ValueError(f"unknown fault mode: {mode!r}")
+        return self._expect_ok(f"FAULT {mode}")
+
+    def ping(self):
+        """Check that the device responds to health checks."""
+        reply = self.command("PING")
+        if reply != "PONG":
+            raise DeviceError(f"unexpected response: {reply!r}")
+        return True
+
+    def status(self):
+        """Return current sensor fault and successful reading count."""
+        fields = self.command("STATUS").split()
+        if (len(fields) != 3 or fields[0] != "STATUS"
+                or fields[1] not in {"NONE", "DISCONNECTED", "STUCK", "TIMEOUT"}):
+            raise DeviceError("invalid status response")
+        try:
+            samples = int(fields[2])
+        except ValueError as exc:
+            raise DeviceError("invalid sample count") from exc
+        if samples < 0 or str(samples) != fields[2]:
+            raise DeviceError("invalid sample count")
+        return DeviceStatus(fault=fields[1], samples=samples)
+
+    def reset(self):
+        """Restore sensor defaults; a broken communication channel needs restart."""
+        return self._expect_ok("RESET")
 
     def read(self):
         fields = self.command("READ").split()
