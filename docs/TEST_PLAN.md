@@ -2,7 +2,6 @@
 
 # Test Plan: Temperature-Sensor-Simulator
 
-**Document status:** Updated for the current `main` implementation (2026-11-09).  
 **Test type:** C++ unit tests, Python-to-C++ integration tests, and typed-driver contract testing.  
 **Source of truth:** `src/`, `framework/device.py`, `tests/`, and [PROTOCOL.md](PROTOCOL.md).  
 **Important:** The inventory below is based on test source. GitHub Actions runs CTest and pytest independently; check the actual workflow run for results.
