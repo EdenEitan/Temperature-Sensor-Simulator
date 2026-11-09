@@ -8,7 +8,9 @@ A deterministic C++ temperature sensor simulator with a Python test driver and p
 - `src/main.cpp` — stdin/stdout transport loop; `src/Protocol.h` / `src/Protocol.cpp` — command parser and dispatcher.
 - `framework/device.py` — typed Python sensor API plus raw command access, C++ process management, parsing, response timeouts, and cleanup.
 - `scripts/try_driver.py` — manual Python-to-C++ integration smoke test.
-- `tests/` — pytest integration tests (work in progress).
+- `tests/test_device.py` and `tests/test_driver_api.py` — pytest integration and typed-API tests.
+- `tests/cpp/` — lightweight C++ unit suites for `Sensor` and `CommandProtocol`, registered with CTest.
+- `.github/workflows/tests.yml` — Ubuntu CI running CTest and pytest for Python 3.11 and 3.12.
 - `docs/` — design notes and manual validation journal.
 
 ## Requirements
@@ -72,8 +74,13 @@ python3 -m pip install pytest
 Then, from the repository root:
 
 ```bash
-python3 -m pytest -v
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure  # C++ unit suites
+python3 -m pytest -v                     # Python integration tests
 ```
+
+The CI workflow runs this pipeline on pushes to `main`, pull requests, and manual dispatch, and uploads a pytest JUnit XML artifact per Python version.
 
 The `binary` fixture in `tests/conftest.py` uses CMake to build `build/device_sim` once per test session. The `device` fixture starts a fresh simulator process per test.
 
@@ -111,4 +118,4 @@ This is a software testing simulator, not a calibrated physical sensor or an ope
 
 ## Status
 
-The C++ command interface and Python driver are implemented. Automated integration tests cover the original command protocol and the new typed Python API; no GitHub Actions workflow is configured yet.
+The C++ command interface and Python driver are implemented. Automated tests include C++ unit coverage for the Sensor and command protocol, plus Python integration tests covering the raw and typed driver APIs. GitHub Actions builds and runs both CTest and pytest; see the Actions tab for run-specific results. The design and test coverage are summarized in [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
