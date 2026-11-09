@@ -4,7 +4,10 @@
 
 Python pytest -> `framework/device.py` (`Device`) -> stdin/stdout pipes -> `src/main.cpp` (I/O loop) -> `src/Protocol.h/.cpp` (parsing and command dispatch) -> `src/Sensor.h/.cpp` (domain model).
 
-This is an ASCII, newline-delimited **command/response protocol**, not HTTP/REST and not a real hardware driver. Each command has one line; responses have one line except intentionally silenced fault scenarios. The driver sends one request at a time.
+This is an ASCII, newline-delimited **command/response protocol**. 
+Each command has one line; 
+responses have one line except intentionally silenced fault scenarios.
+The driver sends one request at a time.
 
 ## Command reference
 
