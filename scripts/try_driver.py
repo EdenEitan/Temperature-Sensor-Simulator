@@ -1,6 +1,11 @@
+from pathlib import Path
 from framework.device import Device
 
-with Device("./device_sim") as device:
+
+ROOT = Path(__file__).resolve().parents[1]
+BINARY = ROOT / "build" / "device_sim"
+
+with Device(BINARY) as device:
     print(device.command("PING"))
 
     device.command("SET 77")
