@@ -1,0 +1,3 @@
+/mnt/c/Users/edene/projects/Temperature-Sensor-Simulator/build/CMakeFiles/device_sim.dir
+/mnt/c/Users/edene/projects/Temperature-Sensor-Simulator/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/edene/projects/Temperature-Sensor-Simulator/build/CMakeFiles/rebuild_cache.dir

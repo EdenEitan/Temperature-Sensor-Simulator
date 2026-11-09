@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/device_sim.dir/src/main.cpp.o CMakeFiles/device_sim.dir/src/Sensor.cpp.o -o device_sim 
