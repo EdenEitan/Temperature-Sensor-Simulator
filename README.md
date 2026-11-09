@@ -5,8 +5,8 @@ A deterministic C++ temperature sensor simulator with a Python test driver and p
 ## Components
 
 - `src/Sensor.h`, `src/Sensor.cpp` — sensor state, validation, calibration, alarm threshold, and simulated sensor faults.
-- `src/main.cpp` — line-based command/response interface over standard input/output.
-- `framework/device.py` — Python driver that starts the C++ process, sends commands, parses readings, enforces response timeouts, and cleans up.
+- `src/main.cpp` — stdin/stdout transport loop; `src/Protocol.h` / `src/Protocol.cpp` — command parser and dispatcher.
+- `framework/device.py` — typed Python sensor API plus raw command access, C++ process management, parsing, response timeouts, and cleanup.
 - `scripts/try_driver.py` — manual Python-to-C++ integration smoke test.
 - `tests/` — pytest integration tests (work in progress).
 - `docs/` — design notes and manual validation journal.
@@ -79,6 +79,9 @@ The `binary` fixture in `tests/conftest.py` uses CMake to build `build/device_si
 
 ## Command protocol
 
+For the complete command contract, response/error formats, and typed Python methods, see [docs/PROTOCOL.md](docs/PROTOCOL.md).
+
+
 Each request and response is one newline-terminated ASCII line.
 
 | Command | Example reply | Description |
@@ -108,4 +111,4 @@ This is a software testing simulator, not a calibrated physical sensor or an ope
 
 ## Status
 
-The C++ command interface and Python driver are implemented. Automated test coverage and CI are being reviewed and extended; no GitHub Actions workflow is configured yet.
+The C++ command interface and Python driver are implemented. Automated integration tests cover the original command protocol and the new typed Python API; no GitHub Actions workflow is configured yet.

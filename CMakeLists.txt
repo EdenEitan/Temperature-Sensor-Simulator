@@ -7,5 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(device_sim
     src/main.cpp
+    src/Protocol.cpp
     src/Sensor.cpp
 )
