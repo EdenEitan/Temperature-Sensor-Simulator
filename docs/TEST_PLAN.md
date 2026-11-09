@@ -3,9 +3,9 @@
 # Test Plan: Temperature-Sensor-Simulator
 
 **Document status:** Updated for the current `main` implementation (2026-11-09).  
-**Test type:** Automated Python-to-C++ integration and driver-contract testing.  
+**Test type:** C++ unit tests, Python-to-C++ integration tests, and typed-driver contract testing.  
 **Source of truth:** `src/`, `framework/device.py`, `tests/`, and [PROTOCOL.md](PROTOCOL.md).  
-**Important:** Test inventory below is based on repository source. Collection count is not a new execution report.
+**Important:** The inventory below is based on test source. GitHub Actions runs CTest and pytest independently; check the actual workflow run for results.
 
 ## 1. Scope and Requirements
 
@@ -61,9 +61,12 @@ The new `CommandProtocol` layer separates **transport** from **command interpret
    - Client-side finite-number/type validation; server-side range validation.
    - Process startup, timeout detection, desynchronization protection, process termination, and resource cleanup.
 
-5. **Integration and Regression Testing (`tests/`)**
+5. **Unit, Integration, and Regression Testing (`tests/`)**
+   - `tests/cpp/test_sensor.cpp`: standalone Sensor unit-test executable (11 test cases).
+   - `tests/cpp/test_protocol.cpp`: standalone CommandProtocol unit-test executable (13 test cases).
    - Real Python-to-C++ subprocess communication (no sensor mock).
    - Both legacy raw-command tests and typed-API contract tests.
+   - CMake/CTest and GitHub Actions for automated execution.
 
 ### Out of Scope
 
@@ -71,7 +74,7 @@ The new `CommandProtocol` layer separates **transport** from **command interpret
 - Concurrent multi-client access or thread-safety guarantees.
 - Production-scale performance/load testing, thermal inertia, and persistent telemetry.
 - Native Windows pipe support (the current selector-based driver targets Linux/WSL).
-- Exhaustive fuzzing and independent unit-test coverage of every C++ function.
+- Exhaustive fuzzing and complete C++ branch-coverage measurement.
 
 ### Interfaces (Inputs, Outputs, APIs, Events)
 
@@ -133,7 +136,9 @@ The typed methods do not replace raw `command()`: direct wire access is delibera
 | TS-17 | Typed API invalid types and range | Negative / API | Local type validation; server range validation | P1 | `test_typed_api_rejects_invalid_numeric_types` (4); `test_typed_api_invalid_range_is_atomic` |
 | TS-18 | Typed fault/recovery/reset and raw-command escape hatch | API regression | Preserve old wire interface alongside new typed API | P1 | `test_stuck_fault_and_recovery`, `test_disconnected_reads_do_not_increment_samples`, `test_reset_restores_defaults`, `test_invalid_fault_mode`, `test_raw_command_for_malformed_wire_input`, `test_typed_timeout_requires_restart` |
 
-Test implementations: [`tests/test_device.py`](../tests/test_device.py) and [`tests/test_driver_api.py`](../tests/test_driver_api.py).
+Test implementations: [`tests/test_device.py`](../tests/test_device.py), [`tests/test_driver_api.py`](../tests/test_driver_api.py), [`tests/cpp/test_sensor.cpp`](../tests/cpp/test_sensor.cpp), and [`tests/cpp/test_protocol.cpp`](../tests/cpp/test_protocol.cpp).
+
+**Additional C++ unit scenarios:** `sensor_unit` covers defaults, value boundaries, non-finite rejection, atomic setters, calibration, alarm, disconnection, timeout, stuck readings, and reset. `protocol_unit` covers wire parsing/formatting, valid and malformed commands, unknown commands, fault behavior, communication silence, and reset. CTest registers the two executables as `sensor_unit` and `protocol_unit`.
 
 ## 3. Risks and Priorities
 
@@ -181,24 +186,25 @@ These are design-level cases mapped to automated tests above; one row may repres
 
 ## 5. Execution and Automation
 
-- **Test levels:** Automated end-to-end **integration** tests across real Python subprocess pipes and C++ simulator; **typed API contract** tests. Separate C++ unit tests and physical hardware tests are not currently implemented.
+- **Test levels:** Standalone **C++ unit tests** for `Sensor` and `CommandProtocol`, automated end-to-end **integration** tests across real Python subprocess pipes and C++ simulator, and **typed API contract** tests. Physical hardware testing is out of scope.
 - **Environment:** Linux or WSL; C++17 compiler; CMake 3.16+; Python 3; pytest. The driver uses `selectors` and is not designed for native Windows pipe handling.
-- **Build:** `cmake -S . -B build` then `cmake --build build`.
+- **Build:** `cmake -S . -B build` then `cmake --build build`. `sensor_core` is a reusable library shared by the simulator and unit-test executables.
 - **Required fixtures and data:** `tests/conftest.py` provides session-scoped `binary` (CMake build once) and function-scoped `device` (new process per test). `DEVICE_BINARY` can override the executable path. `pytest.mark.parametrize` supplies boundary, invalid-input, calibration, alarm, and failure-command data.
 - **Mocks:** No mock sensor. Tests exercise the compiled C++ process. Some tests instantiate `Device(binary, timeout=...)` directly.
 - **Setup/teardown and isolation:** `Device` is a context manager; `close()` closes the selector and pipes and terminates/kills the child as needed. Each function-scoped test starts with clean sensor state.
 - **Timeouts/failure handling:** Default command timeout is 0.5s; targeted tests use 0.1s or 0.15s. The driver rejects reuse after a timeout to prevent stale-response mix-ups. Protocol `ERR` replies become `DeviceError`.
-- **Logging/reporting:** pytest console output; no persisted JUnit/HTML reports or separate driver logging mechanism configured in the inspected repository.
+- **Logging/reporting:** CTest reports failures using `--output-on-failure`. pytest produces console output and `pytest-results.xml` in GitHub Actions; uploaded as a workflow artifact per Python version. No separate driver event logging mechanism.
 - **Execution:**
 
 ```bash
 python3 -m pip install pytest
+ctest --test-dir build --output-on-failure
 python3 -m pytest -v
 # Optional machine-readable local report:
 python3 -m pytest -v --junitxml=pytest-results.xml
 ```
 
-- **CI triggers:** **Not configured.** No `.github/workflows/` GitHub Actions workflow exists in the inspected branch. Tests currently run manually/local; enabling CI is follow-up work.
+- **CI triggers:** `.github/workflows/tests.yml` executes on pushes to `main`, pull requests, and manual `workflow_dispatch`. Each Ubuntu job (Python 3.11 and 3.12) compiles the C++ simulator and both unit-test executables, runs CTest, runs pytest, and uploads the pytest JUnit XML report.
 
 ## 6. Coverage, Results, and Follow-up
 
@@ -215,20 +221,22 @@ python3 -m pytest -v --junitxml=pytest-results.xml
 | --- | ---: | --- |
 | `tests/test_device.py` | 44 | Original protocol, sensor behavior, faults, process handling |
 | `tests/test_driver_api.py` | 12 | New typed-driver interface, state and error-contract regression |
-| **Total** | **56** | Parametrized cases counted individually |
+| `tests/cpp/test_sensor.cpp` | 11 | Sensor domain unit cases run within the `sensor_unit` CTest executable |
+| `tests/cpp/test_protocol.cpp` | 13 | Protocol unit cases run within the `protocol_unit` CTest executable |
+| **Total** | **56 Python + 24 C++** | Python parametrized cases counted individually; CTest registers two executables |
 
-**Execution results / report links:** The repository files establish the **56-case inventory**, not a new test run. No durable CI artifact or test-run link was found; record the date, environment, outcome, and any report URL after running the commands above.
+**Execution results / report links:** The test-source inventory contains **56 pytest cases + 24 C++ unit cases**. The CI workflow produces run-specific logs and pytest JUnit artifacts under the repository's **Actions** tab. A committed workflow does not by itself prove a passing run; check the latest completed job and log before recording a pass.
 
 **Defects and infrastructure failures:** No open defects are established by this document. Track future issues separately with reproduction commands, expected/actual behavior, and relevant logs.
 
 **Untested areas and limitations:**
-- No isolated `Sensor.cpp`/`Protocol.cpp` C++ unit tests or branch-coverage metrics.
+- Standalone C++ tests now exist for `Sensor` and `CommandProtocol`; branch-coverage metrics are not collected.
 - No exhaustive fuzzing, non-ASCII/binary input, or systematic parsing of intentionally corrupted device replies.
-- Explicit unknown-command response is implemented, but no dedicated assertion for `ERR UNKNOWN_COMMAND` is present in the inspected test suite.
+- The C++ protocol unit suite explicitly asserts `ERR UNKNOWN_COMMAND`; the Python integration suite does not have a dedicated unknown-command assertion.
 - `test_missing_binary_reports_device_error` is inside a triple-quoted string in `test_device.py` and **is not an active test**.
 - No multi-process concurrency, native Windows transport, hardware validation, or production load testing.
 - Several out-of-range tests verify that subsequent temperature/alarm readings remain unchanged, but do not independently assert every internal calibration/threshold value.
 
-**Regression candidates:** Run the complete pytest suite after changing C++ domain logic, command protocol, Python driver, fault behavior, or build configuration. Add focused malformed-reply tests and a minimal Linux CI workflow when time permits.
+**Regression candidates:** Run the complete pytest suite after changing C++ domain logic, command protocol, Python driver, fault behavior, or build configuration. Add focused malformed-reply tests, fuzz tests, and branch-coverage collection when time permits.
 
-**Completion decision:** Suitable as an **interview/demo-level integration test project** with a documented protocol and typed driver. Production readiness and automated CI coverage are **not** claimed. Release confidence should depend on a fresh local test run and review of the limitations above.
+**Completion decision:** Suitable as an **interview/demo-level automation project** with unit, integration, and typed-API tests plus a Linux CI workflow. Production readiness, complete code coverage, and hardware validation are **not** claimed. Release confidence should depend on a fresh local test run and review of the limitations above.
