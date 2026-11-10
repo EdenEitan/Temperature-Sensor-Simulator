@@ -192,7 +192,7 @@ These are design-level cases mapped to automated tests above; one row may repres
 - **Mocks:** No mock sensor. Tests exercise the compiled C++ process. Some tests instantiate `Device(binary, timeout=...)` directly.
 - **Setup/teardown and isolation:** `Device` is a context manager; `close()` closes the selector and pipes and terminates/kills the child as needed. Each function-scoped test starts with clean sensor state.
 - **Timeouts/failure handling:** Default command timeout is 0.5s; targeted tests use 0.1s or 0.15s. The driver rejects reuse after a timeout to prevent stale-response mix-ups. Protocol `ERR` replies become `DeviceError`.
-- **Logging/reporting:** CTest reports failures using `--output-on-failure`. pytest produces console output and `pytest-results.xml` in GitHub Actions; uploaded as a workflow artifact per Python version. No separate driver event logging mechanism.
+- **Logging/reporting:** CTest reports failures using `--output-on-failure`. pytest produces console output and `pytest-results.xml` in GitHub Actions; uploaded as a workflow artifact per Python version. The sanitizer job also produces `sanitizer-results.xml` from CTest, uploaded as a workflow artifact. No separate driver event logging mechanism.
 - **Execution:**
 
 ```bash
@@ -203,7 +203,7 @@ python3 -m pytest -v
 python3 -m pytest -v --junitxml=pytest-results.xml
 ```
 
-- **CI triggers:** `.github/workflows/tests.yml` executes on pushes to `main`, pull requests, and manual `workflow_dispatch`. Each Ubuntu job (Python 3.11 and 3.12) compiles the C++ simulator and both unit-test executables, runs CTest, runs pytest, and uploads the pytest JUnit XML report.
+- **CI triggers:** `.github/workflows/tests.yml` executes on pushes to `main`, pull requests, and manual `workflow_dispatch`. Each Ubuntu job (Python 3.11 and 3.12) compiles the C++ simulator and both unit-test executables, runs CTest, runs pytest, and uploads the pytest JUnit XML report. A separate Ubuntu/Clang job builds instrumented C++ binaries with `-fsanitize=address,undefined` and `-fno-omit-frame-pointer`, runs the two C++ unit suites via CTest, and uploads `sanitizer-results.xml`. `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1` cause sanitizer findings to fail the job. The sanitizer job does **not** run Python integration tests.
 
 ## 6. Coverage, Results, and Follow-up
 
@@ -213,6 +213,7 @@ python3 -m pytest -v --junitxml=pytest-results.xml
 - Protocol: malformed requests, error handling, fault injection and post-error recovery.
 - Driver: raw and typed commands, parsed reading/status objects, timeouts, desynchronization policy, subprocess death, cleanup.
 - Reliability: DISCONNECTED, STUCK, TIMEOUT, COMMUNICATION_FAILURE, and 200-operation sequence.
+- Instrumented C++ unit testing: AddressSanitizer (including leak detection where supported) and UndefinedBehaviorSanitizer as a separate Clang CI job. Sanitizers find certain runtime issues exercised by tests; they do not guarantee absence of memory bugs.
 
 ### Current Test Inventory (source-based)
 
@@ -224,12 +225,12 @@ python3 -m pytest -v --junitxml=pytest-results.xml
 | `tests/cpp/test_protocol.cpp` | 13 | Protocol unit cases run within the `protocol_unit` CTest executable |
 | **Total** | **56 Python + 24 C++** | Python parametrized cases counted individually; CTest registers two executables |
 
-**Execution results / report links:** The test-source inventory contains **56 pytest cases + 24 C++ unit cases**. The CI workflow produces run-specific logs and pytest JUnit artifacts under the repository's **Actions** tab. A committed workflow does not by itself prove a passing run; check the latest completed job and log before recording a pass.
+**Execution results / report links:** The test-source inventory contains **56 pytest cases + 24 C++ unit cases**. The CI workflow produces run-specific logs, pytest JUnit artifacts, and a separate sanitizer CTest JUnit artifact under the repository's **Actions** tab. A committed workflow does not by itself prove a passing run; check the latest completed job and log before recording a pass.
 
 **Defects and infrastructure failures:** No open defects are established by this document. Track future issues separately with reproduction commands, expected/actual behavior, and relevant logs.
 
 **Untested areas and limitations:**
-- Standalone C++ tests now exist for `Sensor` and `CommandProtocol`; branch-coverage metrics are not collected.
+- Standalone C++ tests now exist for `Sensor` and `CommandProtocol`, and are run in an ASan/UBSan-instrumented Clang job; branch-coverage metrics are not collected.
 - No exhaustive fuzzing, non-ASCII/binary input, or systematic parsing of intentionally corrupted device replies.
 - The C++ protocol unit suite explicitly asserts `ERR UNKNOWN_COMMAND`; the Python integration suite does not have a dedicated unknown-command assertion.
 - `test_missing_binary_reports_device_error` is inside a triple-quoted string in `test_device.py` and **is not an active test**.
@@ -238,4 +239,4 @@ python3 -m pytest -v --junitxml=pytest-results.xml
 
 **Regression candidates:** Run the complete pytest suite after changing C++ domain logic, command protocol, Python driver, fault behavior, or build configuration. Add focused malformed-reply tests, fuzz tests, and branch-coverage collection when time permits.
 
-**Completion decision:** Suitable as an **interview/demo-level automation project** with unit, integration, and typed-API tests plus a Linux CI workflow. Production readiness, complete code coverage, and hardware validation are **not** claimed. Release confidence should depend on a fresh local test run and review of the limitations above.
+**Completion decision:** Suitable as an **interview/demo-level automation project** with unit, integration, and typed-API tests plus Linux CI and a dedicated sanitizer-instrumented C++ unit-test job. Production readiness, complete code coverage, and hardware validation are **not** claimed. Release confidence should depend on a fresh local test run and review of the limitations above.
