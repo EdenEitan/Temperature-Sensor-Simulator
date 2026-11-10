@@ -10,7 +10,7 @@ A deterministic C++ temperature sensor simulator with a Python test driver and p
 - `scripts/try_driver.py` — manual Python-to-C++ integration smoke test.
 - `tests/test_device.py` and `tests/test_driver_api.py` — pytest integration and typed-API tests.
 - `tests/cpp/` — lightweight C++ unit suites for `Sensor` and `CommandProtocol`, registered with CTest.
-- `.github/workflows/tests.yml` — Ubuntu CI running CTest and pytest for Python 3.11 and 3.12.
+- `.github/workflows/tests.yml` — Ubuntu CI running CTest and pytest for Python 3.11 and 3.12, plus a separate Clang build with AddressSanitizer and UndefinedBehaviorSanitizer for C++ unit tests.
 - `docs/` — design notes and manual validation journal.
 
 ## Requirements
@@ -80,7 +80,7 @@ ctest --test-dir build --output-on-failure  # C++ unit suites
 python3 -m pytest -v                     # Python integration tests
 ```
 
-The CI workflow runs this pipeline on pushes to `main`, pull requests, and manual dispatch, and uploads a pytest JUnit XML artifact per Python version.
+The CI workflow runs this pipeline on pushes to `main`, pull requests, and manual dispatch, and uploads a pytest JUnit XML artifact per Python version. A separate Clang sanitizer job compiles C++ with `-fsanitize=address,undefined -fno-omit-frame-pointer`, executes the C++ unit suites via CTest, and uploads a sanitizer CTest JUnit report. The sanitizer job does not run the Python integration suite.
 
 The `binary` fixture in `tests/conftest.py` uses CMake to build `build/device_sim` once per test session. The `device` fixture starts a fresh simulator process per test.
 
@@ -118,4 +118,4 @@ This is a software testing simulator, not a calibrated physical sensor or an ope
 
 ## Status
 
-The C++ command interface and Python driver are implemented. Automated tests include C++ unit coverage for the Sensor and command protocol, plus Python integration tests covering the raw and typed driver APIs. GitHub Actions builds and runs both CTest and pytest; see the Actions tab for run-specific results. The design and test coverage are summarized in [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
+The C++ command interface and Python driver are implemented. Automated tests include C++ unit coverage for the Sensor and command protocol, plus Python integration tests covering the raw and typed driver APIs. GitHub Actions builds and runs both CTest and pytest, and separately checks the C++ unit-test executables under ASan/UBSan; see the Actions tab for run-specific results. The design and test coverage are summarized in [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
