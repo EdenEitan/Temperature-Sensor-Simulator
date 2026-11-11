@@ -35,9 +35,17 @@ flowchart LR
 | **Transport** | `src/main.cpp` | Line-buffered stdin ingestion and explicit stdout flushing. |
 | **Command Protocol** | `src/Protocol.cpp` | Wire parsing, token validation, response formatting, and communication fault injection. |
 | **Domain Core** | `src/Sensor.cpp` | State ownership, finite-number range checks, calibration offsets, and inclusive alarm rules. |
+
 For the development process, including my own sensor implementation, the integration work, and what I learned along the way, see the [development journal](docs/DEV_JOURNAL.md).
 
+## Engineering Highlights
 
+* **IEEE-754 Floating-Point Robustness:** Setter boundaries explicitly enforce `std::isfinite` (and `math.isfinite` in the driver) alongside numeric range checks. Standard interval checks (`value < min || value > max`) fail silently on `NaN` because all relational comparisons with `NaN` evaluate to `false`.
+* **Protocol Desynchronization Protection:** In a serialized protocol without request IDs, a delayed response cannot be correlated safely with subsequent commands. The Python driver immediately marks the communication stream invalid upon timeout and mandates a process restart to prevent silent state corruption.
+* **Clean Layered Architecture (SRP):** Complete separation between standard I/O transport (`main.cpp`), command parsing/dispatch (`CommandProtocol.cpp`), and core simulation logic (`Sensor.cpp`).
+* **Dual Testing Pyramid:** 24 standalone C++ unit tests isolate domain and protocol logic, while 57 pytest integration tests exercise real subprocess IPC boundaries, timeouts, and process failures.
+* **Memory & Runtime Safety in CI:** GitHub Actions runs automated matrix tests across Python 3.11 and 3.12, supplemented by a dedicated Clang job instrumented with AddressSanitizer (ASan) and UndefinedBehaviorSanitizer (UBSan).
+* **Empirical Test Verification (Mutation Testing):** The test suite's sensitivity was validated by deliberately injecting logic and boundary bugs (such as altering `>=` to `>` on threshold comparisons and bypassing calibration offsets) to ensure assertions catch realistic off-by-one errors.
 ---
 
 ## Design Choices & Trade-offs
