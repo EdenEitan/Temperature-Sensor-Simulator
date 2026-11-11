@@ -1,6 +1,5 @@
 # Next steps and design notes
 
-These are planned extensions, not implemented features. They preserve the ideas from the development drafts while keeping the current single-process simulator as a working baseline.
 
 ## Deterministic thermal response
 
