@@ -134,4 +134,3 @@ See the [protocol reference](docs/PROTOCOL.md) for commands, errors, Python retu
 - [Test plan](docs/TEST_PLAN.md) — test intent, coverage, and remaining gaps.
 - [Next steps](docs/NEXT_STEPS.md) — deterministic thermal response and a shared-sensor Reactor server, with design details and proposed tests.
 
-This is a software testing project, not a physical sensor model or an operating-system hardware driver. Thermal dynamics, multiple clients, and the Reactor bridge remain planned work.
