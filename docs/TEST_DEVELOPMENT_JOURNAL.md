@@ -38,14 +38,13 @@ I ran tests and used the results as feedback on the implementation and the test 
 
 ## 6. Evaluation and Improvement
 
-After the initial testing, I went back to the original requirements and reviewed the test cases more critically. That evaluation led to two findings, followed by changes:
+When I ran the initial pytest suite, **one of the tests failed**: it checked the requirement that the sensor accept only finite numeric values. The failure led me to investigate the sensor's input validation, where I found that checking only whether a value was below or above the permitted range did not reject `NaN`. Because comparisons with `NaN` are false, the original range check could let it through. **I fixed this after the failed test** by adding `std::isfinite` to the C++ setters, then kept tests for non-finite inputs as regression coverage.
 
-1. **NaN validation:** the requirement said inputs must be finite. a pytest test failed while checking that requirement. Investigating the failure showed that validation based only on rejecting numbers outside the permitted range could allow `NaN`. **Following that finding, I fixed the sensor's validation** with `std::isfinite` and added regression coverage for non-finite values.
-2. **Unknown commands:** I realized I had covered bad arguments to recognized commands, but had not explicitly covered an unrecognized command name in pytest. **Following that coverage finding, I added** a dedicated pytest case that checks the error and verifies the device still responds afterward.
+Afterward, I went back to the original requirements and reviewed the test cases to see what else I might have missed. That review revealed a separate coverage gap: I was testing invalid arguments to recognized commands, but not an entirely unknown command name through pytest. I added a dedicated integration test to check for `ERR UNKNOWN_COMMAND` and verify that the simulator still responds to subsequent requests.
 
-I also made a separate Git working copy and deliberately changed the alarm comparison from `>=` to `>`, then separately bypassed calibration, rerunning tests after each change to evaluate whether my assertions exercised those requirements. These were controlled mutation-testing experiments, not permanent changes to the main code.
+I also wanted to evaluate the tests themselves. In a separate Git working copy, I deliberately introduced two bugs, one at a time, and reran the relevant tests: first I changed the alarm condition from `>=` to `>`, so the alarm would not activate at the exact threshold; then I changed the reading calculation to ignore calibration. These were controlled fault-injection experiments (a simple form of mutation testing), not changes kept in the main implementation.
 
-The full investigation, fixes, and deliberate fault experiments are described in the [Test Execution and Evaluation Journal](TEST_EVALUATION_JOURNAL.md).
+The full findings, fixes, and test-evaluation experiments are documented in the [Test Execution and Evaluation Journal](TEST_EVALUATION_JOURNAL.md).
 
 ## What I Took Away
 
