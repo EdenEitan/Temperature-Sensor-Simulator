@@ -1,0 +1,18 @@
+build/
+*.o
+*.obj
+*.exe
+/device_sim
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Generated local test reports and alternative build directories
+build-*/
+pytest-results.xml
+sanitizer-results.xml
+.coverage
+htmlcov/
+.DS_Store
