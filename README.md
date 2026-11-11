@@ -2,8 +2,6 @@
 
 [![Tests](https://github.com/EdenEitan/Temperature-Sensor-Simulator/actions/workflows/tests.yml/badge.svg)](https://github.com/EdenEitan/Temperature-Sensor-Simulator/actions/workflows/tests.yml)
 
-A deterministic **C++17 sensor simulator** with a **Python driver**, fault injection, and automated unit and integration tests. It runs as a real child process: tests send commands through pipes and verify readings, errors, timeouts, and recovery.
-
 ## Why I built this
 
 I built this project to get hands-on experience with Software Test Development Engineering. I started by learning pytest, test automation frameworks and tools, testing methodologies, and test-case design. I wanted to go beyond the theory and apply what I had learned to a system I could understand, control, and test from end to end.
