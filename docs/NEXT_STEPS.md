@@ -1,5 +1,8 @@
 # Next steps and design notes
 
+1. Shared sensor through a Reactor server
+2. Deterministic thermal response
+
 
 ## Deterministic thermal response
 
