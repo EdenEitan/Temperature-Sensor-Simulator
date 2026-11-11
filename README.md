@@ -11,7 +11,7 @@ I built this project to get hands-on experience with Software Test Development E
 ```mermaid
 flowchart LR
     subgraph TestEnvironment["Test & Automation Environment"]
-        PyTest["pytest Suites (57 Cases)"]
+        PyTest["pytest Suites "]
         Driver["Python Driver (framework/device.py)"]
         PyTest --> Driver
     end
@@ -28,56 +28,78 @@ flowchart LR
     Driver <-->|stdin / stdout IPC Pipes| Transport
 ```
 
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| **Test Suites** | `tests/`, `tests/cpp/` | Unit-level domain assertions and end-to-end integration scenarios. |
+| **Driver / Client** | `framework/device.py` | Subprocess lifecycle, typed API, wire framing, deadlines, and deserialization. |
+| **Transport** | `src/main.cpp` | Line-buffered stdin ingestion and explicit stdout flushing. |
+| **Command Protocol** | `src/Protocol.cpp` | Wire parsing, token validation, response formatting, and communication fault injection. |
+| **Domain Core** | `src/Sensor.cpp` | State ownership, finite-number range checks, calibration offsets, and inclusive alarm rules. |
 For the development process, including my own sensor implementation, the integration work, and what I learned along the way, see the [development journal](docs/DEV_JOURNAL.md).
 
-## What is implemented
-    
-- Controlled raw readings, calibration, inclusive alarm thresholds, reset, and successful-read counting.
-- Separate sensor, command-protocol, and stdin/stdout transport layers.
-- Sensor faults: disconnected, stuck, and timed-out readings; a separate communication failure silences every command.
-- Python methods such as `set_temperature()`, `read()`, and `status()`, plus raw commands for negative testing.
-- Response deadlines, rejection of driver reuse after timeout, and child-process cleanup.
-- **57 pytest cases and 24 C++ unit cases**; CTest registers the C++ cases in two executables.
-- GitHub Actions on Ubuntu with Python 3.11/3.12, plus a separate Clang ASan/UBSan job for the C++ unit suites.
 
-Counts describe the current test inventory. The badge and [Actions runs](https://github.com/EdenEitan/Temperature-Sensor-Simulator/actions) show execution status.
+---
 
-## Design choices worth looking at
+## Design Choices & Trade-offs
 
-| Question | Decision and consequence |
-| --- | --- |
-| How can boundary tests be repeatable? | Set raw temperature explicitly; no random readings or real-time thermal model. |
-| Where does a failure belong? | `Sensor` reports measurement status; `CommandProtocol` decides whether to return an error or suppress a reply. |
-| How much should tests know about the wire format? | Typed methods express test intent; raw `command()` remains available to exercise invalid protocol input. |
-| What happens after no response? | The driver requires a fresh process, because the protocol has no request IDs to correlate a late reply. Restart also loses sensor state. |
-| How can tests avoid hiding a server-side validation bug? | Typed setters reject invalid types/non-finite values, but leave numeric range checks to C++; raw tests bypass typed validation. |
-
-## Architecture
-
-| Layer | Responsibility | Source |
+| Question | Decision | Engineering Rationale |
 | --- | --- | --- |
-| Tests | Check domain rules directly and exercise the complete process boundary | [C++ suites](tests/cpp/), [pytest suites](tests/) |
-| Python driver | Typed API, raw requests, deadlines, response parsing, process lifecycle | [device.py](framework/device.py) |
-| Transport | Read stdin lines and flush replies to stdout | [main.cpp](src/main.cpp) |
-| Protocol | Parse commands, dispatch operations, format replies, inject communication failure | [Protocol.cpp](src/Protocol.cpp) |
-| Sensor | Own state, validate numeric inputs, calculate readings and alarms | [Sensor.cpp](src/Sensor.cpp) |
+| **Boundary determinism** | Explicit `SET` raw temperatures | Eliminates non-deterministic race conditions and real-time sleeps in CI; models exact float boundaries (e.g., 79.99 vs 80.00 °C). |
+| **Failure ownership** | Separated sensor vs protocol faults | Sensor reports physical status (`DISCONNECTED`, `STUCK`, `TIMEOUT`); protocol layer decides whether to return error payloads or suppress replies (`COMMUNICATION_FAILURE`). |
+| **Wire abstraction** | Dual typed / raw test interface | High-level typed methods (`read()`, `status()`) express test intent; raw `command()` escape hatch remains available to inject malformed framing and test parser resilience. |
+| **Timeout handling** | Strict stream invalidation | Prevents late responses from bleeding into the next command's response window on unindexed sequential streams. |
+| **Validation placement** | Client type-guards, server range-guards | Python driver rejects local non-numeric/non-finite types; numeric domain ranges (-40 to 125 °C) are validated exclusively by C++ to prevent tests from masking server validation bugs. |
 
-Each `Device` instance owns one simulator process. Commands are sequential; this version has no TCP server or shared multi-client sensor.
+---
 
-## Build and try it
+## Behavior & Protocol Reference
 
-Use **Linux or WSL**, a C++17 compiler, CMake 3.16+, and Python 3. The Python driver's selector-based pipe handling does not support native Windows.
+The simulator communicates over standard I/O using a single-line ASCII command/response format.
 
-From the repository root:
+| Setting | Default | Input Range | Wire Output Rule |
+| --- | --- | --- | --- |
+| **Raw Temperature** | 25.0 °C | −40.0 to 125.0 °C | Formatted to 2 decimal places (`DATA <temp> <ALARM\|NORMAL>`). |
+| **Calibration Offset** | 0.0 °C | −10.0 to 10.0 °C | Additive: `calibrated = raw + offset`. |
+| **Alarm Threshold** | 80.0 °C | −40.0 to 125.0 °C | Inclusive: triggers when `calibrated >= threshold`. |
+| **Sample Counter** | 0 | Monotonic counter | Increments **only** on successful reads; errors leave counter unchanged. |
+
+*Output range is unconstrained:* Calibrated readings are not clamped to the raw input bounds; `-40 + (-10) = -50 °C` and `125 + 10 = 135 °C` are legitimate outputs at extreme boundaries.
+
+### Fault Injections
+
+* `FAULT STUCK`: Reports a frozen raw 25.0 °C (calibration still applies; read succeeds).
+* `FAULT DISCONNECTED`: `READ` commands return `ERR DISCONNECTED`.
+* `FAULT TIMEOUT`: Sensor suppresses responses to `READ` commands only.
+* `FAULT COMMUNICATION_FAILURE`: Returns `OK` once, then silences all subsequent commands until process termination.
+
+---
+
+## Build and Run
+
+### Prerequisites
+
+* Linux or WSL (Windows Subsystem for Linux).  
+  *(Note: The Python driver utilizes the POSIX `selectors` module on anonymous OS pipes. Native Windows `select()` only supports sockets).*
+* C++17 compliant compiler (GCC 9+ or Clang 10+)
+* CMake 3.16+
+* Python 3.10+ and `pytest`
+
+### Quickstart
 
 ```bash
+# Clone repository
+git clone https://github.com/EdenEitan/Temperature-Sensor-Simulator.git
+cd Temperature-Sensor-Simulator
+
+# Configure and compile
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
+
+# Launch interactive CLI
 ./build/device_sim
 ```
 
-An interactive session (each command is followed by its response):
-
+Interactive session example:
 ```text
 PING
 PONG
@@ -91,62 +113,58 @@ STATUS
 STATUS NONE 1
 ```
 
-Press Ctrl+D to exit. For a Python smoke test:
-
-```bash
-python3 -m scripts.try_driver
-```
-
-Or use the typed API:
+### Python Driver Usage
 
 ```python
 from framework.device import Device
 
 with Device("build/device_sim") as sensor:
-    sensor.set_temperature(77)
-    sensor.set_calibration(3)
+    sensor.set_temperature(77.0)
+    sensor.set_calibration(3.0)
+    
     reading = sensor.read()
-    print(reading.temperature, reading.alarm)  # 80.0 True
-    print(sensor.status().samples)             # 1
+    print(f"Temperature: {reading.temperature}°C, Alarm Active: {reading.alarm}")
+    # Output: Temperature: 80.0°C, Alarm Active: True
+    
+    status = sensor.status()
+    print(f"Fault State: {status.fault}, Processed Samples: {status.samples}")
+    # Output: Fault State: NONE, Processed Samples: 1
 ```
 
-## Run the tests
+---
 
-After the build above:
+## Testing & CI Pipeline
+
+The project implements a complete testing strategy spanning unit, integration, and contract verification.
 
 ```bash
+# Set up Python virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install pytest
+pip install pytest
+
+# 1. Run C++ unit suites via CTest (sensor_unit & protocol_unit)
 ctest --test-dir build --output-on-failure
-python3 -m pytest -v
+
+# 2. Run Python integration test suite
+pytest -v
 ```
 
-pytest builds the simulator once per session unless `DEVICE_BINARY` points to an existing executable. Each device fixture starts a fresh process. The [test plan](docs/TEST_PLAN.md) maps scenarios to actual tests and records coverage gaps.
+### CI/CD Workflow (`.github/workflows/tests.yml`)
 
-CI runs CTest and pytest, saving pytest JUnit reports per Python version. Its separate sanitizer job runs **C++ unit tests only**, with a CTest JUnit report.
+1. **Multi-Version Integration Matrix:** Builds binaries and executes both CTest and pytest suites against Python 3.11 and 3.12 on Ubuntu runners, generating structured JUnit XML test reports.
+2. **Clang Sanitizer Pipeline:** A standalone CI job compiles the C++ codebase with `-fsanitize=address,undefined -fno-omit-frame-pointer` and runs the unit suites under CTest with leak detection (`detect_leaks=1`) enabled to guarantee memory integrity.
 
-## Behavior at a glance
+---
 
-| Setting | Default | Accepted input |
-| --- | --- | --- |
-| Raw temperature | 25 °C | −40 to 125 °C |
-| Calibration offset | 0 °C | −10 to 10 °C |
-| Alarm threshold | 80 °C | −40 to 125 °C |
+## Engineering Documentation
 
-A reading is `raw + offset`; the alarm is active at `reading >= threshold`. The calibrated result is not clamped to the raw-input range: −50 °C and 135 °C are valid outputs at the combined extremes. Only successful reads increment the counter.
+Detailed breakdowns of design phases, test strategies, and architectural extensions:
 
-`STUCK` uses a fixed raw 25 °C, with calibration still applied. `DISCONNECTED` returns an explicit error. `TIMEOUT` suppresses `READ` replies. `COMMUNICATION_FAILURE` acknowledges activation, then suppresses all replies until restart.
-
-See the [protocol reference](docs/PROTOCOL.md) for commands, errors, Python return types, and recovery rules.
-
-## Development notes and next steps
-
-- [Development journal](docs/DEV_JOURNAL.md) — developing the sensor and the C++/Python integration.
-- [Test development journal](docs/TEST_DEVELOPMENT_JOURNAL.md) — the six-stage testing workflow.
-- [Test execution and evaluation journal](docs/TEST_EVALUATION_JOURNAL.md) — discoveries during testing and the fixes that followed.
-- [Research notes](docs/RESEARCH_NOTES.md) — what informed the initial scope.
-- [Manual test log](docs/MANUAL_TEST_LOG.md) — recorded observations, including a stale executable.
-- [Test plan](docs/TEST_PLAN.md) — test intent, coverage, and remaining gaps.
-- [Next steps](docs/NEXT_STEPS.md) — deterministic thermal response and a shared-sensor Reactor server, with design details and proposed tests.
-
+* [Development Journal](docs/DEV_JOURNAL.md) — Architecture evolution, ChatGPT integration review, and refactoring history.
+* [Test Development Journal](docs/TEST_DEVELOPMENT_JOURNAL.md) — Six-stage test engineering workflow and design rationales.
+* [Test Evaluation Journal](docs/TEST_EVALUATION_JOURNAL.md) — Deep dive into the `NaN` input flaw, bug reproduction, and mutation testing.
+* [Test Plan](docs/TEST_PLAN.md) — Full verification matrix, test priorities (P0/P1), and coverage gaps.
+* [Protocol Specification](docs/PROTOCOL.md) — Wire format, return types, and recovery specifications.
+* [Manual Test Log](docs/MANUAL_TEST_LOG.md) — Integration transcripts and diagnosis of stale build artifacts.
+* [Next Steps & Roadmap](docs/NEXT_STEPS.md) — Mathematical formulation for simulated thermal inertia and Java Reactor concurrent server design.
