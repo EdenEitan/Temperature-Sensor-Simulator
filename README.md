@@ -4,23 +4,33 @@
 
 ## Why I built this
 
-I built this project to get hands-on experience with Software Test Development Engineering. I started by learning pytest, test automation frameworks and tools, testing methodologies, and test-case design. I wanted to go beyond the theory and apply what I had learned to a system I could understand, control, and test from end to end.
+I built this project to get hands-on experience with Software Test Development Engineering. I started by learning pytest, test automation frameworks and tools, testing methodologies, and test-case design. I wanted to go beyond the theory and apply what I had learned to a system I could understand, control, and test from end to end. As I learned more, I noticed how much testing had in common with my previous cyber research work: understanding how systems behave, questioning assumptions, and exploring what happens when something goes wrong or an input isn't what was expected.
 
-As I learned more, I noticed how much testing had in common with my previous cyber research work: understanding how systems behave, questioning assumptions, and exploring what happens when something goes wrong or an input isn't what was expected.
+## Architecture
 
-I chose to build a temperature sensor simulator in C++ and test it through Python. The sensor provides predictable behavior, while calibration, alarm thresholds, invalid inputs, and simulated faults give me plenty of scenarios to investigate. The project grew into a small test environment with a Python driver, automated tests, and CI.
+```mermaid
+flowchart LR
+    subgraph TestEnvironment["Test & Automation Environment"]
+        PyTest["pytest Suites (57 Cases)"]
+        Driver["Python Driver (framework/device.py)"]
+        PyTest --> Driver
+    end
+
+    subgraph SimulatorProcess["C++ Simulator Process (device_sim)"]
+        Transport["Transport Layer (src/main.cpp)"]
+        Protocol["Command Protocol (src/Protocol.cpp)"]
+        Sensor["Sensor Model (src/Sensor.cpp)"]
+
+        Transport <-->|Lines / Flush| Protocol
+        Protocol <-->|Domain Calls| Sensor
+    end
+
+    Driver <-->|stdin / stdout IPC Pipes| Transport
+
 
 For the development process, including my own sensor implementation, the integration work, and what I learned along the way, see the [development journal](docs/DEV_JOURNAL.md).
 
 ## What is implemented
-flowchart LR
-    Test["pytest / Python Driver (framework/device.py)"] 
-    -->|stdin / pipes| Transport["Transport Layer (src/main.cpp)"]
-    Transport --> Protocol["Command Protocol (src/Protocol.cpp)"]
-    Protocol --> Sensor["Sensor Core (src/Sensor.cpp)"]
-    Sensor -->|ReadResult| Protocol
-    Protocol -->|Response String| Transport
-    Transport -->|stdout / flush| Test
     
 - Controlled raw readings, calibration, inclusive alarm thresholds, reset, and successful-read counting.
 - Separate sensor, command-protocol, and stdin/stdout transport layers.
