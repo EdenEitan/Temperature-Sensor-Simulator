@@ -26,7 +26,7 @@ flowchart LR
     end
 
     Driver <-->|stdin / stdout IPC Pipes| Transport
-
+```
 
 For the development process, including my own sensor implementation, the integration work, and what I learned along the way, see the [development journal](docs/DEV_JOURNAL.md).
 
