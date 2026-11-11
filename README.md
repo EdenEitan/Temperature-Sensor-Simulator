@@ -13,7 +13,15 @@ I chose to build a temperature sensor simulator in C++ and test it through Pytho
 For the development process, including my own sensor implementation, the integration work, and what I learned along the way, see the [development journal](docs/DEV_JOURNAL.md).
 
 ## What is implemented
-
+flowchart LR
+    Test["pytest / Python Driver (framework/device.py)"] 
+    -->|stdin / pipes| Transport["Transport Layer (src/main.cpp)"]
+    Transport --> Protocol["Command Protocol (src/Protocol.cpp)"]
+    Protocol --> Sensor["Sensor Core (src/Sensor.cpp)"]
+    Sensor -->|ReadResult| Protocol
+    Protocol -->|Response String| Transport
+    Transport -->|stdout / flush| Test
+    
 - Controlled raw readings, calibration, inclusive alarm thresholds, reset, and successful-read counting.
 - Separate sensor, command-protocol, and stdin/stdout transport layers.
 - Sensor faults: disconnected, stuck, and timed-out readings; a separate communication failure silences every command.
